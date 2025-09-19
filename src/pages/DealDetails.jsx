@@ -81,15 +81,17 @@ export default function DealDetailsPage() {
   // Adapt to your UI’s expected shape:
   // Your timeline sorts by created_date and reads content from the message body.
   const uiMessages = hhThread.map(m => ({
-    id: m.id,
-    dealer_id: currentDeal.dealer_id,     // keep same key shape your UI uses
-    deal_id: currentDeal.id,
-    channel: m.channel || 'email',
-    direction: m.direction,               // 'in' | 'out'
-    body: m.body,                         // main text content
-    created_date: m.createdAt,            // your UI sorts on created_date
-    meta: m.meta || {}
-  }));
+  id: m.id,
+  dealer_id: currentDeal.dealer_id,
+  deal_id: currentDeal.id,
+  channel: m.channel || 'email',
+  // MessageTimeline expects 'inbound' | 'outbound'
+  direction: m.direction === 'in' ? 'inbound' : 'outbound',
+  // MessageTimeline renders 'content'
+  content: m.body || '',
+  created_date: m.createdAt,
+  meta: m.meta || {}
+}));
 
   // New first (desc)
   setMessages(uiMessages.sort((a, b) => new Date(b.created_date) - new Date(a.created_date)));
