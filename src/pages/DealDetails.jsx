@@ -1,4 +1,5 @@
-
+// NEW: HaggleHub backend helper (messages)
+import { Message as HHMessage } from '../api/hh';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Link,
@@ -73,10 +74,26 @@ export default function DealDetailsPage() {
       const currentVehicle = vehicles.find(v => v.id === currentDeal.vehicle_id);
       const currentDealer = dealers.find(d => d.id === currentDeal.dealer_id);
       
-      if(currentDealer) {
-        const messageData = await Message.filter({ dealer_id: currentDealer.id });
-        setMessages(messageData.sort((a, b) => new Date(b.created_date) - new Date(a.created_date)));
-      }
+      if (currentDeal) {
+  // Pull thread from our new backend using the deal's numeric id
+  const hhThread = await HHMessage.list(String(currentDeal.id));
+
+  // Adapt to your UI’s expected shape:
+  // Your timeline sorts by created_date and reads content from the message body.
+  const uiMessages = hhThread.map(m => ({
+    id: m.id,
+    dealer_id: currentDeal.dealer_id,     // keep same key shape your UI uses
+    deal_id: currentDeal.id,
+    channel: m.channel || 'email',
+    direction: m.direction,               // 'in' | 'out'
+    body: m.body,                         // main text content
+    created_date: m.createdAt,            // your UI sorts on created_date
+    meta: m.meta || {}
+  }));
+
+  // New first (desc)
+  setMessages(uiMessages.sort((a, b) => new Date(b.created_date) - new Date(a.created_date)));
+}
 
       setDeal(currentDeal);
       setVehicle(currentVehicle);
