@@ -1,35 +1,30 @@
 import React, { useEffect, useState } from "react";
-import { Deal } from "@/api/entities";      // Base44 entity wrapper (your deals)
-import { User } from "@/api/entities";      // Base44 entity wrapper (current user)
-import { Button } from "@/components/ui/button";
 
 const API = import.meta.env.VITE_API_URL || "https://api.hagglehub.app";
 
 export default function InboxPage() {
   const [user, setUser] = useState(null);
-  const [deals, setDeals] = useState([]);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  // Load user, deals, and unmatched messages
+  // Load current user and unmatched inbox messages
   useEffect(() => {
     const load = async () => {
       try {
-        setLoading(true);
-        const me = await User.me();
-        setUser(me);
+        const respUser = await fetch(`${API}/users/me`);
+        if (!respUser.ok) throw new Error("User not found");
+        const currentUser = await respUser.json();
+        setUser(currentUser);
 
-        const allDeals = await Deal.list();
-        setDeals(allDeals);
-
-        const resp = await fetch(`${API}/inbox/unmatched?userKey=${me.key}`);
-        if (!resp.ok) throw new Error("Failed to load inbox");
-        const data = await resp.json();
-        setMessages(data);
-      } catch (err) {
-        console.error(err);
-        setError(err.message || "Failed to load inbox");
+        if (currentUser?.key) {
+          const resp = await fetch(`${API}/inbox/unmatched?userKey=${currentUser.key}`);
+          if (!resp.ok) throw new Error("Failed inbox fetch");
+          const data = await resp.json();
+          setMessages(data);
+        }
+      } catch (e) {
+        console.error("Inbox load failed:", e);
+        setMessages([]);
       } finally {
         setLoading(false);
       }
@@ -37,96 +32,78 @@ export default function InboxPage() {
     load();
   }, []);
 
-  const attach = async (messageId, dealId) => {
+  const attachToDeal = async (msgId, dealId) => {
     try {
-      const resp = await fetch(`${API}/inbox/attach`, {
+      const resp = await fetch(`${API}/inbox/${msgId}/attach`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messageId, dealId })
+        body: JSON.stringify({ dealId }),
       });
       if (!resp.ok) throw new Error("Failed to attach");
-      const updated = await resp.json();
-      alert("Message attached successfully!");
-
-      // remove message from inbox
-      setMessages(msgs => msgs.filter(m => m.id !== messageId));
-    } catch (err) {
-      console.error(err);
-      alert(err.message);
+      // remove from inbox list
+      setMessages(messages.filter((m) => m.id !== msgId));
+    } catch (e) {
+      alert(e.message);
     }
   };
 
-  const createDeal = async (message) => {
+  const createDealFromMessage = async (msgId) => {
     try {
-      // For now: create a blank deal for this user, seeded with dealer email
-      const newDeal = {
-        userKey: user.key,
-        dealerName: message.meta.sender || "Unknown Dealer",
-        status: "open"
-      };
-      const resp = await fetch(`${API}/deals`, {
+      const resp = await fetch(`${API}/inbox/${msgId}/createDeal`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newDeal)
       });
       if (!resp.ok) throw new Error("Failed to create deal");
-      const deal = await resp.json();
-
-      await attach(message.id, deal.id);
-    } catch (err) {
-      console.error(err);
-      alert(err.message);
+      // remove from inbox list
+      setMessages(messages.filter((m) => m.id !== msgId));
+    } catch (e) {
+      alert(e.message);
     }
   };
 
-  if (loading) return <div className="p-6">Loading inbox…</div>;
-  if (error) return <div className="p-6 text-red-600">{error}</div>;
+  if (loading) {
+    return (
+      <div className="p-4">
+        <p>Loading inbox…</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-green-50 p-6">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Inbox</h1>
-
-        {messages.length === 0 && (
-          <div className="text-gray-600">No unmatched messages 🎉</div>
-        )}
-
+    <div className="p-4">
+      <h1 className="text-xl font-semibold mb-4">Inbox</h1>
+      {messages.length === 0 ? (
+        <p className="text-gray-500">No unmatched messages.</p>
+      ) : (
         <div className="space-y-4">
           {messages.map((m) => (
-            <div key={m.id} className="bg-white border rounded-lg shadow p-4">
-              <div className="text-sm text-gray-500 mb-2">
-                From: {m.meta?.sender || "Unknown"} •{" "}
-                {new Date(m.createdAt).toLocaleString()}
+            <div key={m.id} className="border rounded p-3 bg-white shadow-sm">
+              <div className="text-sm text-gray-600 mb-1">
+                <span className="font-semibold">{m.sender}</span> →{" "}
+                <span>{m.recipient}</span>
               </div>
-              <div className="font-medium mb-2">{m.meta?.subject || "(no subject)"}</div>
-              <div className="whitespace-pre-wrap text-sm mb-4">
-                {m.body.slice(0, 300)}
-              </div>
-
-              <div className="flex gap-2 flex-wrap">
-                {/* Attach to existing deal */}
-                {deals.map((d) => (
-                  <Button
-                    key={d.id}
-                    onClick={() => attach(m.id, d.id)}
-                    className="bg-brand-teal text-white hover:bg-brand-teal-dark"
-                  >
-                    Attach to {d.vehicleTitle || d.dealerName || `Deal #${d.id}`}
-                  </Button>
-                ))}
-
-                {/* Create new deal */}
-                <Button
-                  onClick={() => createDeal(m)}
-                  className="bg-brand-lime text-brand-teal hover:bg-brand-lime-dark"
+              <div className="font-medium">{m.subject}</div>
+              <div className="text-sm whitespace-pre-wrap mt-1">{m.preview || m.body}</div>
+              <div className="flex gap-2 mt-3">
+                <button
+                  className="bg-brand-lime text-brand-teal px-3 py-1 rounded text-sm font-semibold"
+                  onClick={() => {
+                    const dealId = prompt("Enter deal ID to attach:");
+                    if (dealId) attachToDeal(m.id, dealId);
+                  }}
+                >
+                  Attach to Deal
+                </button>
+                <button
+                  className="bg-brand-teal text-white px-3 py-1 rounded text-sm font-semibold"
+                  onClick={() => createDealFromMessage(m.id)}
                 >
                   Create New Deal
-                </Button>
+                </button>
               </div>
             </div>
           ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }
