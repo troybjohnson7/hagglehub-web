@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 
-const API = import.meta.env.VITE_API_URL || "https://api.hagglehub.app";
+const API = "https://api.hagglehub.app"; // TEMP: hardcode for debugging
 
 export default function MessagesPage() {
   const [user, setUser] = useState(null);
