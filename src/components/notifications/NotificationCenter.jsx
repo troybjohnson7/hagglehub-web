@@ -1,62 +1,40 @@
-import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import React from 'react';
+import { User } from '@/api/entities';
 
-const API = import.meta.env.VITE_API_URL || "https://api.hagglehub.app";
+const API = import.meta.env.VITE_API_URL || 'https://api.hagglehub.app';
 
-export default function NotificationCenter({ user, showBadgeOnly = false }) {
-  const [count, setCount] = useState(0);
+export default function NotificationCenter(){
+  const [count, setCount] = React.useState(0);
 
-  useEffect(() => {
-    if (!user?.key) return;
+  async function refresh(){
+    try{
+      const me = await User.me();
+      if(!me?.key){ setCount(0); return; }
+      const r = await fetch(`${API}/inbox/unmatched?userKey=${encodeURIComponent(me.key)}`, { credentials: 'include' });
+      if(!r.ok) throw new Error(await r.text());
+      const data = await r.json();
+      setCount(Array.isArray(data) ? data.length : 0);
+    }catch(e){
+      setCount(0);
+    }
+  }
 
-    const load = async () => {
-      try {
-        const resp = await fetch(`${API}/inbox/unmatched?userKey=${user.key}`);
-        if (!resp.ok) throw new Error("Failed inbox fetch");
-        const data = await resp.json();
-        setCount(data.length);
-      } catch (e) {
-        console.error("Inbox check failed:", e);
-        setCount(0);
-      }
-    };
-
-    load();
-    const id = setInterval(load, 120000); // refresh every 2 minutes
-    return () => clearInterval(id);
-  }, [user?.key]);
-
-  const BellIcon = (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      className="h-6 w-6 text-brand-teal hover:text-brand-lime"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M15 17h5l-1.405-1.405A2.032 
-           2.032 0 0118 14.158V11a6.002 
-           6.002 0 00-4-5.659V5a2 2 0 
-           10-4 0v.341C7.67 6.165 6 8.388 
-           6 11v3.159c0 .538-.214 1.055-.595 
-           1.436L4 17h5m6 0v1a3 3 0 
-           11-6 0v-1m6 0H9"
-      />
-    </svg>
-  );
+  React.useEffect(()=>{
+    refresh();
+    const t = setInterval(refresh, 60000);
+    return ()=>clearInterval(t);
+  },[]);
 
   return (
-    <Link to="/inbox" className="relative">
-      {BellIcon}
-      {count > 0 && (
-        <span className="absolute -top-2 -right-2 bg-brand-lime text-brand-teal text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center border-2 border-white">
+    <div className="relative">
+      <span className="inline-flex items-center justify-center h-9 w-9 rounded-full bg-slate-100">
+        🔔
+      </span>
+      {count>0 && (
+        <span style={{position:'absolute',top:-4,right:-2,background:'#5EE83F',color:'#0f766e',borderRadius:12,padding:'0 6px',fontSize:12,fontWeight:700}}>
           {count}
         </span>
       )}
-    </Link>
+    </div>
   );
 }
