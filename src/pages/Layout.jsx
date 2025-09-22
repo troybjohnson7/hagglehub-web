@@ -170,6 +170,14 @@ export default function Layout({ children, currentPageName }) {
           
           {/* Right side - notifications and user menu */}
           <div className="flex items-center gap-3">
+            {!user && (
+  <button
+    onClick={handleLogin}
+    className="ml-4 px-4 py-2 bg-brand-teal text-white rounded-lg font-semibold"
+  >
+    Login
+  </button>
+)}
             {user && <NotificationCenter />}
             {user ? (
               <DropdownMenu>
