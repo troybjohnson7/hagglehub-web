@@ -46,7 +46,11 @@ export default function RecentMessages({ messages, dealers, isLoading }) {
       <CardContent className="space-y-4">
         {messages.length > 0 ? (
           messages.slice(0, 5).map((message) => (
-            <div key={message.id} className="border-b border-slate-100 last:border-0 pb-3 last:pb-0">
+            <Link 
+              key={message.id} 
+              to={createPageUrl(`Messages?dealer_id=${message.dealer_id}`)}
+              className="block border-b border-slate-100 last:border-0 pb-3 last:pb-0 hover:bg-slate-50 rounded-lg p-2 -m-2 transition-colors"
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -68,7 +72,7 @@ export default function RecentMessages({ messages, dealers, isLoading }) {
                 </div>
                 <Badge 
                   variant="outline" 
-                  className={`text-xs ${
+                  className={`text-xs shrink-0 ${
                     message.direction === 'inbound' 
                       ? 'border-brand-lime text-brand-teal bg-lime-50' 
                       : 'border-brand-teal text-brand-teal bg-teal-50'
@@ -77,7 +81,7 @@ export default function RecentMessages({ messages, dealers, isLoading }) {
                   {message.direction === 'inbound' ? '→' : '←'}
                 </Badge>
               </div>
-            </div>
+            </Link>
           ))
         ) : (
           <div className="text-center py-4">
