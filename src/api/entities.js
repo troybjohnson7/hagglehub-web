@@ -1,84 +1,69 @@
-// Frontend compat layer to replace Base44 entities
-// All calls go to your HaggleHub API
-const API = import.meta.env.VITE_API_URL || "https://api.hagglehub.app";
+// Clean compatibility API for HaggleHub backend
+const API = import.meta.env.VITE_API_URL || 'https://api.hagglehub.app';
 
-async function jget(url) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(await r.text());
+async function jget(url){
+  const r = await fetch(url, { credentials:'include' });
+  if(!r.ok) throw new Error(await r.text());
   return r.json();
 }
-async function jpost(url, body) {
+async function jpost(url, body){
   const r = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    credentials:'include',
+    body: JSON.stringify(body || {})
   });
-  if (!r.ok) throw new Error(await r.text());
+  if(!r.ok) throw new Error(await r.text());
   return r.json();
 }
 
+// Users
 export const User = {
-  async me() {
-    // Replace with real auth later
-    return jget(`${API}/users/me`);
+  async me(){
+    try{
+      const u = await jget(`${API}/users/me`);
+      return {
+        id: u.id || u.key,
+        key: u.key,
+        full_name: u.full_name || u.name || 'HaggleHub User',
+        email: u.email
+      };
+    }catch{
+      return { full_name:'HaggleHub User' };
+    }
   },
-  // SOME PAGES EXPECT login/logout methods; stub them to avoid crashes
-  async login() {
-    window.location.href = `${API}/auth/login`;
-  },
-  async logout() {
-    await jpost(`${API}/auth/logout`, {});
-  },
+  async login(){ window.location.href = '/'; },
+  async logout(){ window.location.href = '/'; },
 };
 
+// Deals
 export const Deal = {
-  async list(ordering) {
-    // ordering ignored in this simple API
-    return jget(`${API}/deals`);
-  },
-  async filter(query) {
-    // Only filter by id is used in your shared code
-    if (query?.id) return jget(`${API}/deals/${query.id}`).then(d => [d]);
-    return jget(`${API}/deals`);
-  },
-  async get(id) {
-    return jget(`${API}/deals/${id}`);
-  },
-  async create(payload) {
-    return jpost(`${API}/deals`, payload);
-  }
+  list(){ return jget(`${API}/deals`); },
+  get(id){ return jget(`${API}/deals/${id}`); },
+  filter(q){ if(q?.id) return this.get(q.id).then(d=>[d]); return Promise.resolve([]); },
+  create(payload){ return jpost(`${API}/deals`, payload); },
 };
 
-export const Message = {
-  // Some components call Message.list('-created_date')
-  async list() {
-    // Not available globally in our API; return empty to avoid crashes
-    return [];
-  },
-  // Some code used Message.filter({ dealer_id }) — we can’t do that without DB.
-  // Return [] so UI doesn’t crash; the real thread comes from DealDetails → /deals/:id/messages
-  async filter() {
-    return [];
-  },
-  async listForDeal(dealId) {
-    return jget(`${API}/deals/${dealId}/messages`);
-  },
-  async createForDeal(dealId, { to, subject, body }) {
-    return jpost(`${API}/deals/${dealId}/messages`, {
-      channel: "email",
-      to, subject, body
-    });
-  }
-};
-
-export const Vehicle = {
-  async list() {
-    return jget(`${API}/vehicles`).catch(() => []);
-  }
-};
-
+// Dealers
 export const Dealer = {
-  async list() {
-    return jget(`${API}/dealers`).catch(() => []);
-  }
+  list(){ return jget(`${API}/dealers`); },
+  get(id){ return jget(`${API}/dealers/${id}`); },
+  create(payload){ return jpost(`${API}/dealers`, payload); },
+};
+
+// Vehicles (optional)
+export const Vehicle = {
+  async list(){ try { return await jget(`${API}/vehicles`); } catch { return []; } },
+  async get(id){ try { return await jget(`${API}/vehicles/${id}`); } catch { return null; } },
+};
+
+// Messages
+export const Message = {
+  list(){ return Promise.resolve([]); },
+  filter(q){
+    if(q?.deal_id) return jget(`${API}/deals/${q.deal_id}/messages`);
+    return Promise.resolve([]);
+  },
+  listForDeal(dealId){ return jget(`${API}/deals/${dealId}/messages`); },
+  create(dealId, data){ return jpost(`${API}/deals/${dealId}/messages`, data); },
 };
