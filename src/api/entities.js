@@ -18,6 +18,8 @@ async function jpost(url, body){
 }
 
 // Users
+// at top of the file we already set API = import.meta.env.VITE_API_URL || 'https://api.hagglehub.app';
+
 export const User = {
   async me(){
     try{
@@ -29,12 +31,19 @@ export const User = {
         email: u.email
       };
     }catch{
-      return { full_name:'HaggleHub User' };
+      return null; // unauthenticated
     }
   },
-  async login(){ window.location.href = '/'; },
-  async logout(){ window.location.href = '/'; },
+  login(){ 
+    // send the browser to your backend Google OAuth
+    window.location.href = `${API}/auth/google`;
+  },
+  logout(){ 
+    // and log out via backend then come back to app
+    window.location.href = `${API}/auth/logout?redirect=${encodeURIComponent(window.location.origin)}`;
+  },
 };
+
 
 // Deals
 export const Deal = {
