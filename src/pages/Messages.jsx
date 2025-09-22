@@ -1,126 +1,499 @@
-import React from 'react'
-import { Users, Inbox, Deals, Dealers } from '../api'
-import AttachToDealSelect from '../components/AttachToDealSelect.jsx'
 
-export default function Messages(){
-  const [user, setUser] = React.useState(null)
-  const [unmatched, setUnmatched] = React.useState([])
-  const [deals, setDeals] = React.useState([])
-  const [dealId, setDealId] = React.useState('')
-  const [thread, setThread] = React.useState([])
-  const [form, setForm] = React.useState({to:'',subject:'',body:''})
-  const [sending, setSending] = React.useState(false)
+import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Message } from '@/api/entities';
+import { Dealer } from '@/api/entities';
+import { Deal } from '@/api/entities';
+import { Vehicle } from '@/api/entities';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Send, Sparkles, Loader2, MessageCircle, LogIn, Zap, DollarSign, CheckCircle2, Clock, MessageSquareReply } from 'lucide-react';
+import { InvokeLLM } from '@/api/integrations';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { toast } from 'sonner';
 
-  React.useEffect(()=>{
-    (async ()=>{
-      const me = await Users.me()
-      setUser(me)
-      setDeals(await Deals.list())
-      if(me?.key){
-        setUnmatched(await Inbox.listUnmatched(me.key))
+import MessageBubble from '../components/messages/MessageBubble';
+import QuickActions from '../components/messages/QuickActions';
+import MessageTemplates from '../components/messages/MessageTemplates';
+import PriceExtractNotification from '../components/messages/PriceExtractNotification';
+import { sendReply } from "@/api/functions"; // New import
+
+export default function MessagesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [messages, setMessages] = useState([]);
+  const [dealers, setDealers] = useState([]);
+  const [deals, setDeals] = useState([]);
+  const [selectedDealerId, setSelectedDealerId] = useState(searchParams.get('dealer_id') || null);
+  const [newMessage, setNewMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [isLogMessageOpen, setIsLogMessageOpen] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [extractedPrice, setExtractedPrice] = useState(null);
+  const [showPriceNotification, setShowPriceNotification] = useState(false);
+  
+  const [aiSuggestions, setAiSuggestions] = useState([]);
+  const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
+
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [dealerData] = await Promise.all([Dealer.list()]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const [dealData] = await Promise.all([Deal.list()]);
+        
+        setDealers(dealerData);
+        setDeals(dealData);
+      } catch (error) {
+        console.error("Failed to fetch initial data:", error);
+        toast.error("Failed to load initial data. Please try again.");
       }
-    })().catch(console.error)
-  },[])
-
-  React.useEffect(()=>{
-    if(!dealId){ setThread([]); return }
-    Deals.messages(dealId).then(setThread).catch(()=>setThread([]))
-  },[dealId])
-
-  async function attach(msgId, dId){
-    await Inbox.attach(msgId, dId)
-    setUnmatched(prev => prev.filter(m => m.id !== msgId))
-    if(String(dId)===String(dealId)){
-      setThread(await Deals.messages(dealId))
     }
-    alert('Attached to deal.')
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    if (dealers.length > 0 && !selectedDealerId) {
+      setSelectedDealerId(dealers[0].id);
+    }
+  }, [dealers, selectedDealerId]);
+
+  useEffect(() => {
+    async function fetchMessages() {
+      if (selectedDealerId) {
+        setIsLoading(true);
+        try {
+          const messageData = await Message.filter({ dealer_id: selectedDealerId });
+          setMessages(messageData.sort((a, b) => new Date(a.created_date) - new Date(b.created_date)));
+          
+          const unreadMessages = messageData.filter(m => !m.is_read && m.direction === 'inbound');
+          if (unreadMessages.length > 0) {
+            await Promise.all(unreadMessages.map(m => Message.update(m.id, { is_read: true })));
+          }
+
+        } catch (error) {
+          console.error("Failed to fetch messages:", error);
+          toast.error("Failed to load messages. Please try again.");
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        setMessages([]);
+        setIsLoading(false);
+      }
+    }
+    fetchMessages();
+  }, [selectedDealerId]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+  
+  const extractPriceFromMessage = (content) => {
+    const priceRegex = /\$[\d,]+(?:\.\d{2})?/g;
+    const prices = content.match(priceRegex);
+    if (prices && prices.length > 0) {
+      const numericPrice = parseFloat(prices[0].replace(/[$,]/g, ''));
+      if (numericPrice > 1000) {
+        return numericPrice;
+      }
+    }
+    return null;
+  };
+
+  const handleMessageSubmit = async (content, direction, channel = 'app') => {
+    if (!content.trim() || !selectedDealerId) return;
+    setIsSending(true);
+
+    try {
+      const currentDeal = deals.find(d => d.dealer_id === selectedDealerId);
+      if (!currentDeal) {
+        toast.error('No deal found for this dealer. Please create a deal first.');
+        setIsSending(false);
+        return;
+      }
+
+      let createdMessage;
+
+      if (direction === 'outbound' && channel === 'email') {
+        // Use the backend function to send email and save message
+        const response = await sendReply({
+          message_content: content,
+          dealer_id: selectedDealerId,
+          deal_id: currentDeal.id
+        });
+        
+        if (response.data.success) {
+          // Refresh messages to show the new outbound message
+          const messageData = await Message.filter({ dealer_id: selectedDealerId });
+          setMessages(messageData.sort((a, b) => new Date(a.created_date) - new Date(b.created_date)));
+          toast.success('Email sent successfully!');
+          // The createdMessage will not be directly available here as it's created on the backend
+          createdMessage = null; 
+        } else {
+          throw new Error('Failed to send email');
+        }
+      } else {
+        // Handle app messages as before (no actual email sent)
+        // Extract price if it's an inbound message
+        let extractedPrice = null;
+        if (direction === 'inbound') {
+          extractedPrice = extractPriceFromMessage(content);
+        }
+
+        const messageData = {
+          content,
+          deal_id: currentDeal.id,
+          dealer_id: selectedDealerId,
+          direction,
+          channel,
+          is_read: true,
+          contains_offer: !!extractedPrice,
+          extracted_price: extractedPrice
+        };
+
+        createdMessage = await Message.create(messageData);
+        setMessages(prev => [...prev, createdMessage]);
+
+        // Show price extraction notification if price found
+        if (extractedPrice) {
+          setExtractedPrice(extractedPrice);
+          setShowPriceNotification(true);
+        }
+      }
+
+      setIsSending(false);
+      return createdMessage;
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      toast.error('Failed to send message');
+      setIsSending(false);
+    }
   }
 
-  async function createFromMessage(msgId){
-    const { deal } = await Inbox.createDeal(msgId)
-    setUnmatched(prev => prev.filter(m => m.id !== msgId))
-    setDeals(prev => [...prev, deal])
-    setDealId(String(deal.id))
-    alert(`Created Deal #${deal.id} and attached the message.`)
+  const handleSendMessage = async () => {
+    await handleMessageSubmit(newMessage, 'outbound', 'email'); // Changed to 'email' so it actually sends
+    setNewMessage('');
+  };
+  
+  const handleLogMessage = async (logContent) => {
+    await handleMessageSubmit(logContent, 'inbound');
+    setIsLogMessageOpen(false);
   }
 
-  async function send(e){
-    e.preventDefault()
-    if(!dealId) return alert('Enter a Deal ID first.')
-    setSending(true)
-    try{
-      await Deals.send(dealId, form)
-      setForm({to:'',subject:'',body:''})
-      setThread(await Deals.messages(dealId))
-    } catch(err){
-      alert(err.message)
+  const handleTemplateSelect = (template) => {
+    setNewMessage(template);
+    setShowTemplates(false);
+  };
+
+  const handleAISuggestion = async () => {
+    if (!selectedDealerId) return;
+    setIsSuggesting(true);
+    setAiSuggestions([]);
+
+    const currentDeal = deals.find(d => d.dealer_id === selectedDealerId);
+    if (!currentDeal) {
+      toast.error('No deal found for this dealer. Cannot generate AI suggestions.');
+      setIsSuggesting(false);
+      return;
+    }
+
+    const vehicle = currentDeal ? await Vehicle.filter({id: currentDeal.vehicle_id}).then(res => res[0]) : null;
+
+    const conversationHistory = messages
+      .slice(-10)
+      .map(m => `${m.direction === 'inbound' ? 'Dealer' : 'You'}: ${m.content}`)
+      .join('\n');
+      
+    const prompt = `
+      You are an expert car negotiation coach, "The HaggleHub Coach", trained in Chris Voss's FBI negotiation techniques. Your goal is to provide strategic, high-level advice.
+
+      Given the following deal context and conversation history, provide 2-3 distinct, actionable negotiation strategies.
+
+      For each strategy, provide:
+      1. A clear name for the strategy (e.g., "Calibrated Question to Uncover Constraints").
+      2. A detailed explanation of *why* this strategy is effective in this specific situation.
+      3. A concrete example of how they could phrase their next message to implement this strategy.
+
+      **Deal Context:**
+      - Vehicle: ${vehicle?.year || 'N/A'} ${vehicle?.make || 'N/A'} ${vehicle?.model || 'N/A'}
+      - Dealer's Asking Price: $${currentDeal?.asking_price?.toLocaleString() || 'N/A'}
+      - Your Target Price: $${currentDeal?.target_price?.toLocaleString() || 'Not set'}
+      - Current Dealer Offer: $${currentDeal?.current_offer?.toLocaleString() || 'None yet'}
+      - Purchase Type: ${currentDeal?.purchase_type || 'N/A'}
+      - Current Deal Status: ${currentDeal?.status || 'N/A'}
+
+      **Recent Conversation History:**
+      ${conversationHistory || 'No recent conversation.'}
+
+      **Your Task:**
+      Analyze everything and provide your top 2-3 strategic recommendations. Focus on building long-term leverage, uncovering dealer motivations, and moving the price closer to the user's target without creating animosity.
+    `;
+    
+    try {
+      const response = await InvokeLLM({
+        prompt,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            suggestions: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  strategy_name: { type: "string" },
+                  explanation: { type: "string" },
+                  example_message: { type: "string" }
+                },
+                required: ["strategy_name", "explanation", "example_message"]
+              }
+            }
+          },
+          required: ["suggestions"]
+        }
+      });
+      setAiSuggestions(response.suggestions);
+      setIsSuggestionModalOpen(true);
+    } catch(e) {
+      console.error(e);
+      toast.error('Failed to generate AI suggestions.');
     } finally {
-      setSending(false)
+      setIsSuggesting(false);
     }
+  };
+
+  const selectedDealer = dealers.find(d => d.id === selectedDealerId);
+  const currentDeal = deals.find(d => d.dealer_id === selectedDealerId);
+
+  if (dealers.length === 0 && !isLoading) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="flex flex-col items-center justify-center h-full text-center p-8"
+      >
+        <MessageCircle className="w-12 h-12 text-slate-400 mb-4" />
+        <h2 className="text-xl font-semibold text-slate-700">No Conversations</h2>
+        <p className="text-slate-500">You haven't started any conversations yet. Add a new deal to begin.</p>
+      </motion.div>
+    );
   }
 
   return (
-    <div className="row">
-      {/* Unmatched Inbox */}
-      <div className="card" style={{flex:'1 1 480px', minWidth:360}}>
-        <h3>Unmatched</h3>
-        {user && <div className="badge mt-2">Receiving: deals-{user.key}@hagglehub.app</div>}
-        <div className="list mt-3">
-          {unmatched.length===0 && <div>No unmatched messages.</div>}
-          {unmatched.map(m => (
-            <div key={m.id} className="card">
-              <div style={{fontWeight:600}}>{m.subject || '(no subject)'}</div>
-              <div className="mt-2" style={{fontSize:14,color:'#475569'}}>
-                <strong>{m.sender}</strong> → <span>{m.recipient}</span>
-                <span className="badge" style={{marginLeft:8}}>{new Date(m.createdAt).toLocaleString()}</span>
-              </div>
-              <div className="mt-2" style={{whiteSpace:'pre-wrap'}}>{m.preview || m.body}</div>
-              <div className="row mt-3">
-                <AttachToDealSelect deals={deals} onAttach={(d)=>attach(m.id,d)} />
-                <button className="btn" onClick={()=>createFromMessage(m.id)}>Create New Deal</button>
-              </div>
-            </div>
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="min-h-screen bg-slate-50 flex flex-col"
+    >
+      <PriceExtractNotification 
+        show={showPriceNotification} 
+        price={extractedPrice}
+        deal={currentDeal}
+        onClose={() => setShowPriceNotification(false)}
+        onUpdate={() => {
+          Deal.list().then(setDeals);
+        }}
+      />
+
+      <div className="bg-white border-b border-slate-200 p-4 flex items-center gap-4">
+        <select
+          value={selectedDealerId || ''}
+          onChange={(e) => setSelectedDealerId(e.target.value)}
+          className="flex-1 p-3 border border-slate-200 rounded-xl bg-white text-slate-900 font-medium focus:ring-lime-500 focus:border-lime-500"
+        >
+          <option value="">Select a dealer...</option>
+          {dealers.map(dealer => (
+            <option key={dealer.id} value={dealer.id}>
+              {dealer.name}
+            </option>
           ))}
-        </div>
+        </select>
+        <Dialog open={isLogMessageOpen} onOpenChange={setIsLogMessageOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="icon" className="shrink-0" disabled={!selectedDealerId}>
+              <LogIn className="w-4 h-4"/>
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Log Incoming Message</DialogTitle>
+            </DialogHeader>
+            <LogMessageForm onSubmit={handleLogMessage} />
+          </DialogContent>
+        </Dialog>
       </div>
 
-      {/* Deal Thread */}
-      <div className="card" style={{flex:'1 1 480px', minWidth:360}}>
-        <h3>Deal Thread</h3>
-        <div className="mt-2">
-          <label>Deal ID</label>
-          <input className="input mt-2" value={dealId} onChange={e=>setDealId(e.target.value)} placeholder="e.g., 1"/>
-        </div>
+      {selectedDealer ? (
+        <>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="text-center text-slate-500 py-10">No messages yet. Send one to start!</div>
+            ) : (
+              <AnimatePresence>
+                {messages.map((message, index) => (
+                  <MessageBubble key={message.id} message={message} dealer={selectedDealer} />
+                ))}
+              </AnimatePresence>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
 
-        <form onSubmit={send} className="mt-3">
-          <div className="row" style={{gap:10}}>
-            <div style={{flex:1}}>
-              <label>To</label>
-              <input className="input" value={form.to} onChange={e=>setForm({...form,to:e.target.value})} placeholder="internet.sales@dealer.com" required/>
+          {currentDeal && (
+            <QuickActions 
+              deal={currentDeal} 
+              onAction={(action, data) => {
+                if (action === 'send_message') {
+                  handleMessageSubmit(data.message, 'outbound', 'app');
+                }
+              }}
+            />
+          )}
+
+          <div className="bg-white border-t border-slate-200 p-4">
+            <div className="flex gap-2 mb-2">
+              <Dialog open={isSuggestionModalOpen} onOpenChange={setIsSuggestionModalOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleAISuggestion}
+                    disabled={isSuggesting || !currentDeal}
+                    className="text-xs border-lime-300 text-lime-700 hover:bg-lime-50"
+                  >
+                    {isSuggesting ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Sparkles className="w-3 h-3 mr-1" />}
+                    AI Suggest
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>AI Negotiation Strategies</DialogTitle>
+                    <DialogDescription>Here are a few strategic options for your next move. Choose one to use it.</DialogDescription>
+                  </DialogHeader>
+                  <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                    {aiSuggestions.length > 0 ? (
+                      aiSuggestions.map((suggestion, index) => (
+                        <div key={index} className="p-4 border rounded-lg bg-slate-50">
+                          <h4 className="font-semibold text-sm text-slate-800">{suggestion.strategy_name}</h4>
+                          <p className="text-xs text-slate-600 mt-1 mb-2">{suggestion.explanation}</p>
+                          <blockquote className="border-l-2 border-lime-400 pl-3 text-sm text-slate-700 font-medium bg-white p-2 rounded-r-md">
+                            {suggestion.example_message}
+                          </blockquote>
+                          <Button
+                            size="sm"
+                            className="mt-3 text-xs"
+                            onClick={() => {
+                              setNewMessage(suggestion.example_message);
+                              setIsSuggestionModalOpen(false);
+                            }}
+                          >
+                            Use this message
+                          </Button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-center text-slate-500">No suggestions generated yet, or an error occurred.</p>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              <Sheet open={showTemplates} onOpenChange={setShowTemplates}>
+                <SheetTrigger asChild>
+                  <Button size="sm" variant="outline" className="text-xs">
+                    <MessageSquareReply className="w-3 h-3 mr-1" />
+                    Templates
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="max-h-[80vh]">
+                  <SheetHeader>
+                    <SheetTitle>Message Templates</SheetTitle>
+                    <SheetDescription>Choose a professional template to get started</SheetDescription>
+                  </SheetHeader>
+                  <MessageTemplates onSelect={handleTemplateSelect} deal={currentDeal} />
+                </SheetContent>
+              </Sheet>
             </div>
-            <div style={{flex:1}}>
-              <label>Subject</label>
-              <input className="input" value={form.subject} onChange={e=>setForm({...form,subject:e.target.value})} placeholder="Request for OTD"/>
+
+            <div className="flex gap-2">
+              <Textarea
+                placeholder="Type your reply..."
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
+                className="flex-1 min-h-[44px] text-sm focus:ring-lime-500 focus:border-lime-500"
+                rows={2}
+              />
+              <div className="flex flex-col gap-2">
+                <Button 
+                  size="icon" 
+                  onClick={handleSendMessage} 
+                  disabled={isSending || !newMessage.trim()}
+                  className="bg-teal-700 hover:bg-teal-800 shrink-0"
+                >
+                  {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                </Button>
+              </div>
             </div>
           </div>
-          <div className="mt-2">
-            <label>Message</label>
-            <textarea rows="5" className="input" value={form.body} onChange={e=>setForm({...form,body:e.target.value})} required/>
-          </div>
-          <button className="btn mt-3" disabled={sending}>{sending?'Sending…':'Send'}</button>
-        </form>
-
-        <div className="list mt-4">
-          {thread.map(m=>(
-            <div key={m.id} className="card">
-              <div className="badge">{m.direction.toUpperCase()}</div>
-              <div className="badge" style={{marginLeft:8}}>{new Date(m.createdAt).toLocaleString()}</div>
-              <div className="mt-2" style={{whiteSpace:'pre-wrap'}}>{m.body}</div>
-            </div>
-          ))}
-          {dealId && thread.length===0 && <div>No messages for this deal yet.</div>}
+        </>
+      ) : (
+        <div className="flex items-center justify-center h-full">
+          <p className="text-slate-500">Select a dealer to view messages.</p>
         </div>
-      </div>
-    </div>
+      )}
+    </motion.div>
+  );
+}
+
+function LogMessageForm({ onSubmit }) {
+  const [content, setContent] = useState('');
+  
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSubmit(content);
+    setContent('');
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <Textarea 
+        placeholder="Paste the dealer's email or text message here..."
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        className="min-h-[120px]"
+        required
+      />
+      <Button type="submit" className="w-full bg-lime-600 hover:bg-lime-700">
+        Log Message
+      </Button>
+    </form>
   )
 }

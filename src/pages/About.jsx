@@ -1,9 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ShieldCheck, Target, Bot, Users, TrendingUp, Database } from 'lucide-react';
-import { User } from '@/api/entities'; // Import the User entity
 
 const features = [
   {
@@ -28,17 +28,7 @@ const features = [
   },
 ];
 
-export default function IndexPage() {
-  
-  // This function will be called when the "Get Started" button is clicked
-  const handleLogin = async () => {
-    try {
-      await User.login(); // This triggers the Base44 login/signup flow
-    } catch (error) {
-      console.error("Login failed:", error);
-    }
-  };
-
+export default function AboutPage() {
   return (
     <div className="bg-white">
       {/* Hero Section */}
@@ -55,16 +45,15 @@ export default function IndexPage() {
               HaggleHub is your personal AI negotiation assistant powered by real market data from thousands of completed deals.
             </p>
             <div className="mt-10 flex items-center justify-center gap-x-6">
-              {/* The Link component is removed and replaced with a Button with an onClick handler */}
-              <Button onClick={handleLogin} className="bg-brand-teal hover:bg-brand-teal-dark text-white font-bold">
-                Get Started
-              </Button>
+              <Link to={createPageUrl("Dashboard")}>
+                <Button className="bg-brand-teal hover:bg-brand-teal-dark text-white font-bold">Get Started</Button>
+              </Link>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ... keep existing code (How it Works, Community Intelligence, etc.) ... */}
+      {/* How it Works Section */}
       <div className="bg-slate-50 py-24 sm:py-32">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl lg:text-center">
@@ -93,6 +82,8 @@ export default function IndexPage() {
           </div>
         </div>
       </div>
+
+      {/* Community Intelligence Spotlight */}
       <div className="py-24 sm:py-32 bg-lime-50">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl lg:text-center">
@@ -131,6 +122,8 @@ export default function IndexPage() {
           </div>
         </div>
       </div>
+
+      {/* Video Tutorial Section */}
       <div className="py-24 sm:py-32">
          <div className="mx-auto max-w-7xl px-6 lg:px-8 text-center">
             <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">See It In Action</h2>
