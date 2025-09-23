@@ -9,6 +9,16 @@
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot-check" style="padding:8px;text-align:center;color:#0f766e;font-weight:600">
+  Loading HaggleHub…
+</div>
+<script>
+  // If your React app mounts, it should remove this element.
+  window.__hagglehub_boot = () => {
+    const el = document.getElementById('boot-check');
+    if (el) el.remove();
+  };
+</script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
