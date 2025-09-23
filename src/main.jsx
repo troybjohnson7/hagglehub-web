@@ -1,3 +1,16 @@
+if (typeof window !== 'undefined') {
+  const suspicious = ['base44.app', 'base44'];
+  const href = String(window.location.href).toLowerCase();
+  if (suspicious.some(s => href.includes(s))) {
+    // optional: strip tracking querystrings, then continue
+  }
+  // Prevent any global script from forcing redirect
+  const origAssign = window.location.assign.bind(window.location);
+  const origReplace = window.location.replace.bind(window.location);
+  window.location.assign = (u) => { if (String(u).includes('base44.app')) return; origAssign(u); };
+  window.location.replace = (u) => { if (String(u).includes('base44.app')) return; origReplace(u); };
+}
+
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
