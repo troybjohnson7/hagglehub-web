@@ -22,7 +22,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import NotificationCenter from "./components/notifications/NotificationCenter";
+
+// ✅ FIXED: use alias instead of a wrong relative path
+import NotificationCenter from "@/components/notifications/NotificationCenter.jsx";
 
 const navigationItems = [
   { title: 'Dashboard', icon: LayoutDashboard, url: createPageUrl('Dashboard') },
@@ -45,7 +47,6 @@ export default function Layout({ children, currentPageName }) {
         setUser(me);
 
         if (me) {
-          // Optional unread count if your API supports it; safe fallback otherwise
           try {
             const unread = await Message.filter({ is_read: false });
             setUnreadCount(unread.length || 0);
@@ -91,7 +92,7 @@ export default function Layout({ children, currentPageName }) {
           {/* Centered logo */}
           <div className="absolute left-1/2 transform -translate-x-1/2">
             <img
-              src="/logo.png"            // put your file at /public/logo.png
+              src="/logo.png"
               alt="HaggleHub Logo"
               className="h-10 object-contain"
             />
