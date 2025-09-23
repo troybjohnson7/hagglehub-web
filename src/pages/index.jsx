@@ -1,18 +1,15 @@
-// src/pages/index.jsx
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 
 import Layout from "./Layout.jsx";
 
-// Use the exact casing of your files here:
-import About from "./about.jsx";                // if your file is about.jsx (lowercase)
+// Use Capitalized names in imports (stable on most projects)
+import About from "./About.jsx";
 import Dashboard from "./Dashboard.jsx";
 import AddVehicle from "./AddVehicle.jsx";
 import DealDetails from "./DealDetails.jsx";
 import Messages from "./Messages.jsx";
 import Account from "./Account.jsx";
-
-// Capitalized versions (most common in your repo)
 import PrivacyPolicy from "./PrivacyPolicy.jsx";
 import TermsOfService from "./TermsOfService.jsx";
 
