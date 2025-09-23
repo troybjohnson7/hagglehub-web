@@ -17,6 +17,15 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
 import "./index.css";
 
+// Defensive patch to avoid crash from old Base44 code
+try {
+  if (Object.isFrozen(window.location) || Object.getOwnPropertyDescriptor(window.location, "assign")?.writable === false) {
+    // Do nothing — keep browser default
+  }
+} catch (e) {
+  console.warn("Location.assign safeguard:", e);
+}
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
