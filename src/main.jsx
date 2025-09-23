@@ -24,3 +24,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     </BrowserRouter>
   </React.StrictMode>
 );
+// ...existing imports and ReactDOM.createRoot(...).render(...)
+window.__hagglehub_boot?.();
+
