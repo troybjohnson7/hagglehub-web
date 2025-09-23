@@ -1,20 +1,20 @@
+// src/pages/index.jsx
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 
 import Layout from "./Layout.jsx";
 
-// NOTE: Capital A here:
-import About from "./About.jsx";
-
+// Use the exact casing of your files here:
+import About from "./about.jsx";                // if your file is about.jsx (lowercase)
 import Dashboard from "./Dashboard.jsx";
 import AddVehicle from "./AddVehicle.jsx";
 import DealDetails from "./DealDetails.jsx";
 import Messages from "./Messages.jsx";
 import Account from "./Account.jsx";
 
-// these two are lowercase in your tree:
-import PrivacyPolicy from "./privacypolicy.jsx";
-import TermsOfService from "./termsofservice.jsx";
+// Capitalized versions (most common in your repo)
+import PrivacyPolicy from "./PrivacyPolicy.jsx";
+import TermsOfService from "./TermsOfService.jsx";
 
 const withLayout = (Component, pageName) => (
   <Layout currentPageName={pageName}>
