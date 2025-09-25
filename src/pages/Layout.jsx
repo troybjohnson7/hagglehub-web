@@ -27,7 +27,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import NotificationCenter from "./components/notifications/NotificationCenter";
+import NotificationCenter from "@/components/notifications/NotificationCenter";
 
 const navigationItems = [
   { title: 'Dashboard', icon: LayoutDashboard, url: createPageUrl('Dashboard') },
