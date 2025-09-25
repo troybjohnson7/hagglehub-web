@@ -1,5 +1,11 @@
-import { SendEmail } from './integrations';
-export const testReceiver = async (args) => ({ ok: true, args });
-export const messageProcessor = async (args) => ({ ok: true, args });
-export const sendReply = async ({ to, subject, text, html }) => SendEmail({ to, subject, text, html });
-export const emailHandler = async (args) => ({ ok: true, args });
+import { base44 } from './base44Client';
+
+
+export const testReceiver = base44.functions.testReceiver;
+
+export const messageProcessor = base44.functions.messageProcessor;
+
+export const sendReply = base44.functions.sendReply;
+
+export const emailHandler = base44.functions.emailHandler;
+
