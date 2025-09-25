@@ -1,17 +1,15 @@
-import { base44 } from './base44Client';
-
-
-export const Vehicle = base44.entities.Vehicle;
-
-export const Dealer = base44.entities.Dealer;
-
-export const Deal = base44.entities.Deal;
-
-export const Message = base44.entities.Message;
-
-export const MarketData = base44.entities.MarketData;
-
-
-
-// auth sdk:
-export const User = base44.auth;
+import { Local } from './local';
+export const Vehicle = Local.table('vehicles');
+export const Dealer = Local.table('dealers');
+export const Deal = Local.table('deals');
+export const Message = Local.table('messages');
+export const MarketData = Local.table('market');
+export const User = {
+  async me(){ return Local.user || { id: null }; },
+  async login(email, code){
+    const gate = import.meta.env.VITE_DEV_ADMIN_CODE || "";
+    if (gate && code !== gate) throw new Error("Invalid admin code");
+    return Local.setUser({ id: "local-admin", email, name: "Haggle Admin", isAdmin: true });
+  },
+  async logout(){ return Local.logout(); }
+};
