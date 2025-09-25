@@ -1,8 +1,11 @@
-import { createClient } from './api/base44Client';
-// import { getAccessToken } from './api/base44Client/utils/auth-utils';
+// Base44 removed. This is a no-op shim to satisfy legacy imports.
+export const base44 = {};
+export default base44;
 
-// Create a client with authentication required
-export const base44 = createClient({
-  appId: "68b8d90724709eb4dfd9a6ab", 
-  requiresAuth: true // Ensure authentication is required for all operations
-});
+// Optional named exports to satisfy any deep imports without breaking the build.
+export const User = {};
+export const Message = {};
+export const Deal = {};
+export const Dealer = {};
+export const Vehicle = {};
+export const MarketData = {};
