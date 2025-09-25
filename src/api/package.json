@@ -3,6 +3,5 @@
   "version": "1.0.0",
   "type": "module",
   "main": "./index.js",
-  "module": "./index.js",
-  "types": "./index.d.ts"
+  "module": "./index.js"
 }
