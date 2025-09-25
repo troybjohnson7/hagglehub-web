@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>HaggleHub • Inbox (Dev)</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background: #0b0f19; color: #e5e7eb; margin:0; }
+    header { padding: 16px 20px; background: #111827; display:flex; align-items:center; gap:12px; }
+    .logo { width: 28px; height: 28px; border-radius: 6px; background: #111; background-image:url('/logo.png'); background-size: cover; }
+    h1 { font-size: 18px; margin: 0; }
+    .wrap { max-width: 980px; margin: 20px auto; padding: 0 16px; }
+    .card { background:#111827; border:1px solid #1f2937; border-radius:14px; padding:16px; margin-bottom:16px; }
+    label { font-size: 12px; color:#9ca3af; display:block; margin-bottom:6px; }
+    input { width: 100%; max-width: 360px; padding: 10px 12px; border-radius:10px; border:1px solid #374151; background:#0b1220; color:#e5e7eb; outline:none; }
+    button { padding: 10px 12px; border:0; border-radius:10px; background:#3b82f6; color:white; font-weight:600; cursor:pointer; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { text-align:left; padding:10px; border-bottom:1px solid #1f2937; font-size: 14px; }
+    th { color:#9ca3af; font-weight:500; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="logo"></span>
+    <h1>Inbox (Dev Viewer)</h1>
+  </header>
+
+  <div class="wrap">
+    <div class="card">
+      <label>User Key</label>
+      <input id="key" placeholder="local-admin" />
+      <button id="load">Load Inbox</button>
+      <div class="mono" style="margin-top:8px;color:#94a3b8">Send email to <span id="addr">deals-local-admin@hagglehub.app</span> then click "Load Inbox".</div>
+    </div>
+
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 24%">From</th>
+            <th style="width: 24%">To</th>
+            <th style="width: 36%">Subject</th>
+            <th style="width: 16%">Received</th>
+          </tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td colspan="4" style="color:#94a3b8">No messages yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const API = (window.VITE_API_URL || "https://api.hagglehub.app").replace(/\/$/, "");
+    const keyEl = document.getElementById('key');
+    const rows = document.getElementById('rows');
+    const addr = document.getElementById('addr');
+    const loadBtn = document.getElementById('load');
+
+    function guessKey() {
+      try {
+        const db = JSON.parse(localStorage.getItem("hh_local_db_v1") || "{}");
+        if (db && db.user && db.user.id) return db.user.id;
+      } catch(_) {}
+      return "local-admin";
+    }
+
+    function setAddr(k){ addr.textContent = `deals-${k}@hagglehub.app`; }
+
+    async function loadInbox(k) {
+      rows.innerHTML = `<tr><td colspan="4" style="color:#94a3b8">Loading...</td></tr>`;
+      try {
+        const res = await fetch(`${API}/users/${encodeURIComponent(k)}/messages`, { credentials:"include" });
+        const data = await res.json();
+        if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
+        const items = (data.items || []);
+        if (!items.length) {
+          rows.innerHTML = `<tr><td colspan="4" style="color:#94a3b8">No messages yet for <span class="mono">${k}</span>.</td></tr>`;
+          return;
+        }
+        rows.innerHTML = items.map(m => {
+          const dt = new Date(m.ts || Date.now());
+          const when = dt.toLocaleString();
+          return `<tr>
+            <td class="mono">${(m.from||'').replace(/</g,'&lt;')}</td>
+            <td class="mono">${(m.to||'').replace(/</g,'&lt;')}</td>
+            <td>${(m.subject||'').replace(/</g,'&lt;')}</td>
+            <td class="mono">${when}</td>
+          </tr>`;
+        }).join("");
+      } catch (e) {
+        rows.innerHTML = `<tr><td colspan="4" style="color:#ef4444">Error: ${e.message}</td></tr>`;
+      }
+    }
+
+    keyEl.value = guessKey();
+    setAddr(keyEl.value);
+    keyEl.addEventListener('input', () => setAddr(keyEl.value));
+    loadBtn.addEventListener('click', () => loadInbox(keyEl.value));
+
+    // auto-load on open
+    loadInbox(keyEl.value);
+  </script>
+</body>
+</html>
